@@ -1,0 +1,15 @@
+.Rproj.user
+.Rhistory
+.RData
+.Ruserdata
+inst/doc
+/doc/
+/Meta/
+~$*.xlsx
+data/
+archived_r/
+output/
+.Rdata
+.httr-oauth
+.DS_Store
+.quarto

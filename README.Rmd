@@ -1,0 +1,90 @@
+---
+output: github_document
+---
+
+<!-- README.md is generated from README.Rmd. Please edit that file -->
+
+```{r, include = FALSE}
+knitr::opts_chunk$set(
+  collapse = TRUE,
+  comment = "#>",
+  fig.path = "man/figures/README-",
+  out.width = "100%"
+)
+```
+
+# xlr8: Quickly Create Consistently Styled Excel Reports from R
+
+<!-- badges: start -->
+<!-- badges: end -->
+
+**`xlr8`** simplifies and accelerates the process of generating consistently styled Excel reports directly from R. It uses metadata tags embedded within Excel templates to automatically place your data and preserve formatting—making Excel reporting fast, easy, and repeatable.
+
+**With `xlr8` you can:**
+
+- Read structured metadata from Excel templates.
+- Automatically populate Excel templates with R data.
+- Effortlessly apply original Excel styles and formatting.
+
+## Installation
+
+You can install the development version of `xlr8` directly from GitHub using:
+
+``` r
+# install.packages("devtools")
+devtools::install_github("your_github_username/xlr8")
+```
+
+## Quick Example
+
+Here's a simple example of how `xlr8` streamlines Excel report creation:
+
+```{r example, eval = FALSE}
+library(xlr8)
+
+# Your data frame with report data
+df <- tibble::tibble(
+  name = c("Alice", "Bob", "Charlie"),
+  score = c(95, 82, 87)
+)
+
+# Generate a formatted Excel report
+xlr8(
+  df = df,
+  metadata_path = "templates/student_scores_template.xlsx",
+  output_path = "reports/student_scores_report.xlsx"
+)
+```
+
+After running this code, you'll have a fully formatted Excel file ready to share or distribute:
+
+![Styled Excel Report](man/figures/README-styled-report-example.png)
+
+*(Screenshot of a styled report output can go here.)*
+
+## Why `xlr8`?
+
+- **Consistency**: Keep your Excel reports visually consistent with minimal effort.
+- **Automation**: Reduce manual copying, pasting, and formatting.
+- **Flexibility**: Easily modify your templates without changing R code.
+
+## How does it work?
+
+`xlr8` uses embedded metadata tags in your Excel template to identify where data should be placed and how it should be styled. It then applies these styles automatically after populating data, ensuring your final report always matches your predefined formatting.
+
+## Further Documentation
+
+For more detailed usage and advanced workflows, check out the package vignettes and the function-level documentation:
+
+``` r
+vignette("getting-started", package = "xlr8")
+```
+
+## Contributing and Issues
+
+If you encounter issues or would like to contribute to the development of `xlr8`, please visit our [GitHub repository](https://github.com/your_github_username/xlr8).
+
+``` r
+# To build the README after making edits
+devtools::build_readme()
+```

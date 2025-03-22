@@ -1,0 +1,118 @@
+---
+title: "Getting Started with xlr8: Creating Styled Excel Reports"
+author: "Your Name"
+output: rmarkdown::html_vignette
+vignette: >
+  %\VignetteIndexEntry{Getting Started with xlr8}
+  %\VignetteEngine{knitr::rmarkdown}
+  \usepackage[utf8]{inputenc}
+---
+
+# Introduction
+
+`xlr8` simplifies creating consistently styled Excel reports directly from R. This vignette guides you through populating an Excel template with your data and automatically applying the original formatting.
+
+# Installation
+
+Install the latest version of `xlr8` from GitHub:
+
+```r
+# install.packages("devtools")
+devtools::install_github("your_github_username/xlr8")
+```
+
+# Workflow Overview
+
+`xlr8` automates Excel reporting with three key steps:
+
+1. Prepare an Excel template with embedded metadata tags.
+2. Populate the Excel template with your data.
+3. Automatically apply styles from the original Excel template.
+
+# Brief Overview of Excel Metadata Tags
+
+The tagging convention used by `xlr8` embeds metadata directly in Excel cells:
+
+- **Single-cell variables** are tagged as:
+  ```
+  *((var*((variable_name
+  ```
+
+- **Tables** are defined as follows:
+  - **Table start with first column definition**:
+    ```
+    *((tbl*((table_name*((col*((first_column_name
+    ```
+  - **Additional columns** in the table:
+    ```
+    *((col*((column_name
+    ```
+  - **Table end marker** placed directly below the table:
+    ```
+    *((table_end
+    ```
+
+For a more detailed explanation on template creation, see the ["Creating Tagged Excel Templates"](creating-tagged-excel-templates.html) vignette.
+
+# Example Usage
+
+First, define your data in R. For templates containing tables, `xlr8` expects your main data frame to include **list-columns containing tibble(s)**. Each list-column corresponds to a table defined in your Excel template metadata.
+
+Here's a clear example of how to structure this:
+
+```{r}
+library(xlr8)
+library(tibble)
+
+# Single-cell variables
+report_date <- as.Date("2025-01-01")
+prepared_by <- "Analyst Name"
+
+# Table data prepared separately as a tibble within a list-column
+project_table <- tibble(
+  project_name = c("Library Expansion", "Community Park"),
+  funding_cp = c(500000, 250000),
+  funding_cc = c(200000, 150000),
+  funding_total = c(700000, 400000),
+  opening_date = as.Date(c("2025-06-01", "2026-05-15")),
+  date_const = as.Date(c("2024-07-01", "2025-03-20")),
+  date_completion = as.Date(c("2025-05-15", "2026-04-30"))
+)
+
+# Final dataframe passed to xlr8, including single-cell variables and table data
+df <- tibble(
+  report_date = report_date,
+  prepared_by = prepared_by,
+  projects = list(project_table) # The table name matches the metadata tag "projects"
+)
+```
+
+Now, generate your Excel report using this structured dataframe:
+
+```{r eval=FALSE}
+xlr8(
+  df = df,
+  metadata_path = "templates/project_template.xlsx",
+  output_path = "reports/project_report.xlsx"
+)
+```
+
+`xlr8` will populate the Excel template, automatically applying the original formatting defined by your tagged cells.
+
+
+
+# Reviewing the Result
+
+Open your Excel file (`reports/project_report.xlsx`) to confirm data placement and formatting.
+
+# Next Steps
+
+To create or adjust Excel templates, please refer to the dedicated ["Creating Tagged Excel Templates"](creating-tagged-excel-templates.html) vignette.
+
+# Conclusion
+
+You've successfully generated a styled Excel report using `xlr8`. Explore further documentation:
+
+```r
+help(package = "xlr8")
+```

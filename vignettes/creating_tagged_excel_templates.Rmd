@@ -1,0 +1,87 @@
+---
+title: "Creating Tagged Excel Templates for xlr8"
+author: "Your Name"
+output: rmarkdown::html_vignette
+vignette: >
+  %\VignetteIndexEntry{Creating Tagged Excel Templates}
+  %\VignetteEngine{knitr::rmarkdown}
+  \usepackage[utf8]{inputenc}
+---
+
+# Introduction
+
+This vignette details how to create Excel templates compatible with `xlr8` by embedding metadata tags. Proper tagging ensures correct data placement and consistent formatting.
+
+# Tagging Conventions
+
+`xlr8` tags are placed directly into Excel cells and follow these patterns:
+
+- **Single-cell variables**:
+  ```
+  *((var*((variable_name
+  ```
+
+- **Tables**:
+  - **Table start with first column**:
+    ```
+    *((tbl*((table_name*((col*((first_column_name
+    ```
+  - **Subsequent columns**:
+    ```
+    *((col*((column_name
+    ```
+  - **Table end marker** placed directly below the table:
+    ```
+    *((table_end
+    ```
+
+# Step-by-Step Tagging Guide
+
+## Step 1: Tagging Variables
+
+Place a tag like `*((var*((report_date` in the cell where a single data value will appear, such as a report date.
+
+## Step 2: Tagging Tables
+
+To define a table clearly:
+
+- In the top-left cell of your table, combine the table and column tags:
+  ```
+  *((tbl*((projects*((col*((project_name
+  ```
+- Define subsequent columns by placing additional tags in adjacent cells (e.g., `*((col*((funding_cp`, `*((col*((funding_cc`, etc.).
+- Directly after the last row intended for table data, insert a cell with the table-end marker:
+  ```
+  *((table_end
+  ```
+
+## Step 3: Formatting Your Template
+
+Apply Excel styles (fonts, colors, number formats) directly to your tagged cells. `xlr8` captures and reapplies these styles automatically.
+
+## Step 4: Saving Your Template
+
+Save your tagged Excel file clearly (e.g., `templates/my_report_template.xlsx`). It's now ready for use with `xlr8`.
+
+# Common Tagging Errors and Solutions
+
+- **Incorrect tag syntax**: ensure there are no spaces or extra characters in your tags.
+- **Missing table-end marker**: always include `*((table_end` immediately after your table to prevent data misalignment.
+
+# Testing Your Template
+
+Validate your template by running a test in R:
+
+```{r eval=FALSE}
+xlr8(
+  df = your_test_dataframe,
+  metadata_path = "templates/my_report_template.xlsx",
+  output_path = "reports/test_report.xlsx"
+)
+```
+
+Inspect the output Excel file for correct data placement and formatting.
+
+# Conclusion
+
+You've successfully created a tagged Excel template compatible with `xlr8`. To populate templates with data, revisit the ["Getting Started"](getting-started.html) vignette.
