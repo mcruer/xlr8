@@ -1,3 +1,11 @@
+#' @importFrom dplyr slice pull filter
+extract_form_name <- function(raw_df){
+  raw_df %>%
+    filter(sheet_name == "form") %>%
+    slice(1) %>%
+    pull(x1)
+}
+
 
 #' Summarize Metadata Extracted from Excel Templates
 #'
@@ -57,9 +65,16 @@
 #' metadata$variable_info  # View extracted variables
 #' metadata$table_info     # View summarized table metadata
 #' }
-#'
+#' @importFrom stringr str_c str_remove str_remove_all
+#' @importFrom dplyr rename relocate mutate select arrange group_by ungroup lead left_join summarise bind_rows
+#' @importFrom tidyr fill pivot_longer
+#' @importFrom magrittr subtract
+#' @importFrom tibble tibble
+#' @importFrom gplyr replace_with_na quickm to_number filter_in
 #' @noRd
 summarize_metadata_from_raw_template <- function (raw_template) {
+
+  form <- extract_form_name(raw_template)
 
   # Helper function to extract target metadata (var, tbl, col) from a string
   target_extraction <- function (string, target) {
@@ -93,28 +108,28 @@ summarize_metadata_from_raw_template <- function (raw_template) {
 
   # Extract metadata for individual variables
   variable_info <- tags %>%
-    dplyr::filter(!is.na(var)) %>%  # Keep only rows with variable names
-    dplyr::select(sheet_name, row, col, var)  # Select relevant columns
+    filter(!is.na(var)) %>%  # Keep only rows with variable names
+    select(sheet_name, row, col, var)  # Select relevant columns
 
   # Identify table start and end rows
   table_lengths <- tags %>%
-    dplyr::filter(!is.na(tbl) | table_end) %>%  # Keep table rows or table_end markers
-    dplyr::arrange(sheet_name, col, row) %>%  # Sort by sheet, column, and row
-    dplyr::group_by(sheet_name, col) %>%  # Group by sheet and column
-    dplyr::mutate(table_end_row = dplyr::lead(row)) %>%  # Get the row after each table start as table end
-    dplyr::filter(!is.na(tbl)) %>%  # Keep only table rows
-    dplyr::ungroup() %>%  # Ungroup to flatten
-    dplyr::select(sheet_name, row, col, tbl, end_row = table_end_row)  # Select relevant columns
+    filter(!is.na(tbl) | table_end) %>%  # Keep table rows or table_end markers
+    arrange(sheet_name, col, row) %>%  # Sort by sheet, column, and row
+    group_by(sheet_name, col) %>%  # Group by sheet and column
+    mutate(table_end_row = lead(row)) %>%  # Get the row after each table start as table end
+    filter(!is.na(tbl)) %>%  # Keep only table rows
+    ungroup() %>%  # Ungroup to flatten
+    select(sheet_name, row, col, tbl, end_row = table_end_row)  # Select relevant columns
 
   # Build interim table information with column associations
   table_info_interim <-
     tags %>%
-    dplyr::filter(!is.na(col_name))  %>%  # Keep rows with column names
-    dplyr::arrange(sheet_name, row, col) %>%  # Sort data by position
-    tidyr::fill(tbl, .direction = "down") %>%  # Fill down table names to associate columns with tables
-    dplyr::select(sheet_name, row, col, tbl, col_name) %>%  # Select relevant fields
-    dplyr::left_join(table_lengths) %>%  # Merge with table lengths (start-end rows)
-    dplyr::group_by(sheet_name, tbl) %>%  # Group by sheet and table
+    filter(!is.na(col_name))  %>%  # Keep rows with column names
+    arrange(sheet_name, row, col) %>%  # Sort data by position
+    fill(tbl, .direction = "down") %>%  # Fill down table names to associate columns with tables
+    select(sheet_name, row, col, tbl, col_name) %>%  # Select relevant fields
+    left_join(table_lengths) %>%  # Merge with table lengths (start-end rows)
+    group_by(sheet_name, tbl) %>%  # Group by sheet and table
     suppressMessages()  # Suppress any warnings during processing
 
   # Handle cases where no table information exists
@@ -153,8 +168,8 @@ summarize_metadata_from_raw_template <- function (raw_template) {
 
     # Summarize final table information
     table_info <- table_info_interim %>%
-      tidyr::fill(end_row, .direction = "down") %>%  # Fill down end_row values
-      dplyr::summarise(
+      fill(end_row, .direction = "down") %>%  # Fill down end_row values
+      summarise(
         row_start = min(row),
         row_end = mean(end_row),
         col_start = min(col),
@@ -165,14 +180,14 @@ summarize_metadata_from_raw_template <- function (raw_template) {
 
     # Extract and format column information
     column_info <- tags %>%
-      dplyr::filter(!is.na(col_name)) %>%
-      dplyr::arrange(sheet_name, row, col) %>%  # Sort by sheet, row, and column
-      tidyr::fill(tbl, .direction = "down") %>%  # Fill table associations downwards
-      dplyr::group_by(sheet_name, tbl) %>%
+      filter(!is.na(col_name)) %>%
+      arrange(sheet_name, row, col) %>%  # Sort by sheet, row, and column
+      fill(tbl, .direction = "down") %>%  # Fill table associations downwards
+      group_by(sheet_name, tbl) %>%
       # Adjust column positions to start from 1 within each table
-      dplyr::mutate(col = col %>% magrittr::subtract(min(col) - 1)) %>%
-      dplyr::select(sheet_name, col, tbl, col_name) %>%  # Select relevant fields
-      dplyr::ungroup()
+      mutate(col = col %>% subtract(min(col) - 1)) %>%
+      select(sheet_name, col, tbl, col_name) %>%  # Select relevant fields
+      ungroup()
   }
 
   variable_info_reformed <- variable_info %>%
@@ -187,7 +202,14 @@ summarize_metadata_from_raw_template <- function (raw_template) {
     mutate(col = col - 1,
            col_start = col_start + col) %>%
     select(-col) %>%
-    bind_rows(variable_info_reformed)
+    bind_rows(variable_info_reformed) %>%
+    mutate(
+      form = form,
+      row_id = if_else (is.na(col_name),
+                        str_c(form, tbl, sep = " "),
+                        str_c(form, tbl, col_name, sep = " ")), .before = 1
+    ) %>%
+    relocate(row_id, .before = 1)
 
 
   # Return results as a tibble with variable, table, and column info

@@ -1,3 +1,9 @@
+utils::globalVariables(c(
+  "column", "dims", "form_metadata", "form_name", "raw_df", "row_id",
+  "step_1", "step_1_length", "x1"
+))
+
+
 #' @importFrom dplyr select mutate filter rename left_join bind_rows relocate ungroup case_when
 #' @importFrom tidyr pivot_longer pivot_wider
 #' @importFrom purrr map map2 map_int pmap pwalk

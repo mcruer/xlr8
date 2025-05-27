@@ -11,10 +11,14 @@ Encoding: UTF-8
 LazyData: true
 RoxygenNote: 7.2.3
 Imports: 
+    databased,
     dplyr,
     gplyr,
+    janitor,
+    listful,
     magrittr,
     openxlsx,
+    openxlsx2,
     purrr,
     readr,
     rlang,

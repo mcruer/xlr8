@@ -1,11 +1,11 @@
 #' Write Data to Excel Workbook Based on Metadata Information
 #'
-#' Writes data from an R data frame into an Excel workbook according to
-#' structured metadata. Populates the workbook with both table-based data
+#' Writes data from an R data frame into an Excel workbook using the
+#' `openxlsx2` package. It populates the workbook with both table-based data
 #' (multiple rows and columns) and single-cell variable data, based on positions
 #' and structures defined in the provided metadata.
 #'
-#' @param wb An Excel workbook object created by \code{openxlsx::loadWorkbook()}
+#' @param wb An Excel workbook object created by \code{openxlsx2::wb_load()}
 #'   into which data will be written.
 #' @param df Data frame containing the actual data to populate into Excel sheets.
 #' @param all_info Tibble containing metadata describing precisely where data
@@ -26,54 +26,71 @@
 #' \itemize{
 #'   \item Which sheet the data should be written to (\code{sheet_name}).
 #'   \item The starting row and column positions (\code{row_start}, \code{col_start}).
-#'   \item Whether column names should be included in the Excel output (\code{colNames}, typically FALSE).
+#'   \item Whether column names should be included in the Excel output (\code{col_names}, typically FALSE).
 #' }
 #'
-#' After preparing metadata-based instructions, this function calls
-#' \code{openxlsx::writeData()} iteratively (via \code{purrr::pwalk}) to populate the Excel workbook.
+#' After preparing metadata-based instructions, this function uses a custom internal utility
+#' \code{pbuild()} to iteratively call \code{openxlsx2::wb_add_data()}, threading the workbook object
+#' through each data insertion step. This pattern supports clean iteration to build on or
+#' mutate an object over iterations with no reliance on global scope.
+#'
+#' This function depends on \code{pbuild()}, which is defined in the \code{listful} package.
 #'
 #' @examples
 #' \dontrun{
-#' wb <- openxlsx::loadWorkbook("template.xlsx")
+#' wb <- openxlsx2::wb_load("template.xlsx")
 #' metadata <- summarize_metadata("template.xlsx")
 #'
-#' df <- tibble::tibble(name = c("A", "B"), value = c(10, 20))
+#' df <- tibble::tibble(
+#'   test_date = Sys.Date(),
+#'   test_number = 42,
+#'   projects = list(tibble::tibble(name = c("Alpha", "Beta"), value = c(100, 200)))
+#' )
 #'
 #' wb <- write_data(wb, df, metadata$all_info[[1]])
-#' openxlsx::saveWorkbook(wb, "populated_template.xlsx", overwrite = TRUE)
+#' openxlsx2::wb_save(wb, "populated_template.xlsx", overwrite = TRUE)
 #' }
 #'
+#' @importFrom listful pbuild
 #' @export
-write_data <- function (wb,
-                        df,
-                        all_info) {
 
+write_data <- function(wb, df, all_info) {
 
+  wb_add_data_customized <- function(wb, x, sheet, start_col, start_row) {
+    openxlsx2::wb_add_data(
+      wb,
+      sheet = sheet,
+      x = x,
+      start_col = start_col,
+      start_row = start_row,
+      col_names = FALSE,
+      na.strings = ""
+    )
+  }
 
-  all_info_cols(all_info, df) %>%
-    select (
+  # Write tables
+  table_list <- all_info_cols(all_info, df) %>%
+    select(
       x = data,
       sheet = sheet_name,
-      startCol = col_start,
-      startRow = row_start,
-      colNames
-    ) %>%
-    mutate(wb = list(wb)) %>%
-    pwalk(openxlsx::writeData)
+      start_col = col_start,
+      start_row = row_start
+    )
 
+  wb <- wb %>%
+    pbuild(table_list, wb_add_data_customized)
 
-  all_info_vars(all_info, df) %>%
-    select (
+  # Write variables (single-cell values)
+  variable_list <- all_info_vars(all_info, df) %>%
+    select(
       x = data,
       sheet = sheet_name,
-      startCol = col_start,
-      startRow = row_start,
-      colNames
-    ) %>%
-    mutate(wb = list(wb)) %>%
-    pwalk(openxlsx::writeData)
+      start_col = col_start,
+      start_row = row_start
+    )
+
+  wb <- wb %>%
+    pbuild(variable_list, wb_add_data_customized)
 
   return(wb)
-
 }
-
