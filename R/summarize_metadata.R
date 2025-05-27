@@ -1,11 +1,18 @@
-#' @importFrom dplyr slice pull filter
-extract_form_name <- function(raw_df){
-  raw_df %>%
+#' @importFrom dplyr pull filter first
+#' @importFrom gplyr filter_out_na
+extract_form_name <- function(raw_df) {
+  out <- raw_df %>%
     filter(sheet_name == "form") %>%
-    slice(1) %>%
-    pull(x1)
-}
+    filter_out_na(x1) %>%
+    pull(x1) %>%
+    first()
 
+  if (is.null(out)) {
+    return(NA_character_)
+  }
+
+  return(out)
+}
 
 #' Summarize Metadata Extracted from Excel Templates
 #'
