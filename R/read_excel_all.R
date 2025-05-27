@@ -93,8 +93,7 @@ read_excel_all <- function(path, sheets = NULL, sheets_regex = ".") {
       dplyr::full_join(initial) %>%
       tidyr::pivot_wider(names_from = col, values_from = cell_contents) %>%
       dplyr::rename_with(~ stringr::str_c("x", .x), -c(sheet_name, row)) %>%
-      dplyr::mutate(sheet_name = factor(sheet_name,
-                                        levels = sheet_names)) %>%
+      dplyr::mutate(sheet_name = as.character(sheet_name)) %>%
       dplyr::arrange(sheet_name)
   )
 }
