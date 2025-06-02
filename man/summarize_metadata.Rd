@@ -4,7 +4,14 @@
 \alias{summarize_metadata}
 \title{Summarize Metadata Directly from an Excel Template File}
 \usage{
-summarize_metadata(metadata_path, sheets = NULL, sheets_regex = ".")
+summarize_metadata(
+  metadata_path,
+  sheets = NULL,
+  sheets_regex = ".",
+  validate = TRUE,
+  quiet = FALSE,
+  fail_on_issue = TRUE
+)
 }
 \arguments{
 \item{metadata_path}{File path to the Excel template workbook.}
@@ -14,6 +21,15 @@ Defaults to \code{NULL}, in which case sheets matching \code{sheets_regex} are r
 
 \item{sheets_regex}{Regular expression pattern to select sheets when \code{sheets} is \code{NULL}.
 Defaults to \code{"."}, matching all sheets.}
+
+\item{validate}{Logical. Whether to validate parsed metadata for issues such as unbalanced tags or duplicates.
+Defaults to \code{TRUE}.}
+
+\item{quiet}{Logical. If \code{TRUE}, suppresses printed warnings and messages during validation.
+Defaults to \code{FALSE}.}
+
+\item{fail_on_issue}{Logical. If \code{TRUE}, causes validation to stop execution when problems are found.
+Defaults to \code{TRUE}.}
 }
 \value{
 A tibble containing structured metadata organized into four list-columns:

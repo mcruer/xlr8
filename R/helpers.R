@@ -1,7 +1,27 @@
 utils::globalVariables(c(
-  "column", "dims", "form_metadata", "form_name", "raw_df", "row_id",
-  "step_1", "step_1_length", "x1"
+  ".", "actual_col_length", "actual_row_end", "alignment_horizontal",
+  "alignment_indent", "alignment_textRotation", "alignment_vertical",
+  "alignment_wrapText", "cell_contents", "colNames", "col_name",
+  "col_start", "cols", "data", "df", "end_row", "fgFill",
+  "fill_patternFill_fgColor_rgb", "fontColour", "font_bold",
+  "font_color_rgb", "font_italic", "font_name", "font_size",
+  "font_strike", "font_underline", "halign", "sheet_name",
+  "style", "rows", "row_start", "col_start", "table_end",
+  "table_end_row", "table_length", "textDecoration", "tbl", "value",
+  "var", "path", "property", "numFmt", "protection_hidden",
+  "protection_locked", "openxlsx_style", "local_format_id", "sheet",
+  "name", "row_end", "source_row", "source_col", "target_row", "target_col",
+  "formula_to_write", "formula", "formulas", "formula_out", "refs",
+  "replacement", "out", "ref", "original", "col_part", "col_abs", "col_idx",
+  "row_abs", "row_part", "new_col_idx", "new_row", "new_col", "row_delta",
+  "col_delta", "delta_row", "delta_col", "formula_location_raw",
+  "formula_from_row", "formula_from_col", "result",
+  "column", "dims", "form_metadata", "form_name", "formula_location",
+  "key_matches", "keys", "okay", "problem", "raw_df", "reference",
+  "row_id", "shifted", "step_1", "step_1_length", "table_end_tbl",
+  "tag", "tag_count", "unknown_keys", "x1"
 ))
+
 
 
 #' @importFrom dplyr select mutate filter rename left_join bind_rows relocate ungroup case_when
@@ -19,7 +39,32 @@ utils::globalVariables(c(
 #' @importFrom tidyxl xlsx_cells xlsx_formats
 #' @importFrom dplyr rowwise
 #' @importFrom stats na.omit
+#' @importFrom openxlsx2 int2col col2int
 NULL
+
+
+
+
+rowcol_to_ref <- function(row, col, col_abs = FALSE, row_abs = FALSE) {
+  tibble(row, col, col_abs, row_abs) %>%
+    mutate(
+      ref = paste0(
+        if_else(col_abs, "$", ""),
+        int2col(col),
+        if_else(row_abs, "$", ""),
+        row
+      )
+    ) %>%
+    pull(ref)
+}
+
+ref_to_row <- function(refs) {
+  as.integer(stringr::str_extract(refs, "\\d+$"))
+}
+
+ref_to_col <- function(refs) {
+  col2int(gsub("\\$?[0-9]+", "", refs))
+}
 
 #' Metadata Tag Pattern
 #'
@@ -116,4 +161,79 @@ all_info_vars <- function (all_info, df) {
                     pull_cell(.y)),
       colNames = FALSE,
     )
+}
+
+
+#' Shift Cell References in Excel Formulas
+#'
+#' Given an Excel formula and a change in location (source → target cell), this function
+#' adjusts all relative cell references to reflect the new position, while preserving absolute references.
+#'
+#' This is useful when copying formulas between cells and wanting to simulate Excel's built-in reference shifting logic.
+#' It handles single-cell references, ranges (e.g., \code{A1:B2}), and complex expressions (e.g., \code{=IF(A1>0, B1, C1)}).
+#'
+#' @param formula Character vector of Excel formulas.
+#' @param source_row Integer vector of row positions where each formula originally resided.
+#' @param source_col Integer vector of column positions where each formula originally resided.
+#' @param target_row Integer vector of row positions where the formula is being moved to.
+#' @param target_col Integer vector of column positions where the formula is being moved to.
+#'
+#' @return A character vector of formulas with shifted cell references, aligned with their new positions.
+#'
+#' @examples
+#' shift_formula_references("=A$1+$B2", source_row = 1, source_col = 1, target_row = 3, target_col = 3)
+#' # Returns: "=C$1+$B4"
+#'
+#' @importFrom tibble tibble
+#' @importFrom tidyr unnest
+#' @importFrom dplyr mutate select pull if_else
+#' @importFrom purrr pmap pmap_chr map map2
+#' @importFrom stringr str_extract str_extract_all str_replace_all fixed
+#' @importFrom openxlsx2 col2int int2col
+#' @export
+shift_formula_references <- function(formula, source_row, source_col, target_row, target_col) {
+
+  shift_refs <- function(refs, row_delta, col_delta) {
+
+    row_delta <- row_delta[1]
+    col_delta <- col_delta[1]
+
+    tibble(original = refs) %>%
+      unnest(original) %>%
+      mutate(
+        col_abs = grepl("^\\$", original),
+        row_abs = grepl("\\$", str_extract(original, "\\$?[0-9]+")),
+        col_part = gsub("\\$.*", "", gsub("^\\$", "", original)),
+        row_part = as.integer(str_extract(original, "[0-9]+")),
+        col_idx = col2int(gsub("\\$", "", col_part)),
+        new_col_idx = if_else(col_abs, col_idx, col_idx + col_delta),
+        new_row = if_else(row_abs, row_part, row_part + row_delta),
+        new_col = int2col(new_col_idx),
+        shifted = paste0(
+          if_else(col_abs, "$", ""),
+          new_col,
+          if_else(row_abs, "$", ""),
+          new_row
+        )
+      )
+  }
+
+  replace_formula_literals <- function(string, pattern, replacement) {
+    stopifnot(length(pattern) == length(replacement))
+    for (i in seq_along(pattern)) {
+      string <- str_replace_all(string, fixed(pattern[i]), replacement[i])
+    }
+    string
+  }
+
+  tibble(formula, source_row, source_col, target_row, target_col) %>%
+    mutate(
+      row_delta = target_row - source_row,
+      col_delta = target_col - source_col,
+      refs = str_extract_all(formula, "\\$?[A-Z]{1,3}\\$?[0-9]{1,7}"),
+      shifted = pmap(list(refs, row_delta, col_delta), shift_refs),
+      replacement = map(shifted, pull, shifted),
+      out = pmap_chr(list(formula, refs, replacement), replace_formula_literals)
+    ) %>%
+    pull(out)
 }

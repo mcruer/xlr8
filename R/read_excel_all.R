@@ -68,33 +68,37 @@ read_excel_all <- function(path, sheets = NULL, sheets_regex = ".") {
   }
 
   initial <- tidyxl::xlsx_cells(path, sheets = sheet_names,
-                     include_blank_cells = FALSE,
-                     ) %>%
+                                include_blank_cells = FALSE,
+  ) %>%
     dplyr::filter(sheet %in% sheet_names) %>%
     dplyr::mutate(
       cell_contents = dplyr::case_when(
         data_type == "blank" ~ NA_character_,
         data_type == "character" ~ character,
         data_type == "error" ~ error,
+        data_type == "logical" ~ as.character (logical),
+        data_type == "date" ~ as.character (date),
         TRUE ~ content,
       )
     ) %>%
-    dplyr::select(sheet_name = sheet, row, col, cell_contents)
-  suppressMessages(
-    initial %>%
-      dplyr::group_by(sheet_name) %>%
-      gplyr::quicks(c(row, col), max) %>%
-      dplyr::mutate(df = map2(
-        row, col,
-        ~ tidyr::expand_grid(row = 1:.x, col = 1:.y)
-      )) %>%
-      dplyr::select(-row, -col) %>%
-      tidyr::unnest(df) %>%
-      dplyr::full_join(initial) %>%
-      tidyr::pivot_wider(names_from = col, values_from = cell_contents) %>%
-      dplyr::rename_with(~ stringr::str_c("x", .x), -c(sheet_name, row)) %>%
-      dplyr::mutate(sheet_name = as.character(sheet_name)) %>%
-      dplyr::arrange(sheet_name)
-  )
-}
+    dplyr::select(sheet_name = sheet, row, col, cell_contents, formula)
 
+  out <- initial %>%
+    dplyr::select(-formula) %>%
+    dplyr::group_by(sheet_name) %>%
+    gplyr::quicks(c(row, col), max) %>%
+    dplyr::mutate(df = map2(row, col,
+                            ~ tidyr::expand_grid(row = 1:.x, col = 1:.y))) %>%
+    dplyr::select(-row, -col) %>%
+    tidyr::unnest(df) %>%
+    dplyr::full_join(initial %>%
+                       dplyr::select(-formula)) %>%
+    tidyr::pivot_wider(names_from = col, values_from = cell_contents) %>%
+    dplyr::rename_with( ~ stringr::str_c("x", .x), -c(sheet_name, row)) %>%
+    dplyr::mutate(sheet_name = as.character(sheet_name)) %>%
+    dplyr::arrange(sheet_name) %>%
+    suppressMessages()
+
+  gplyr::cloak(out, list(formulas = initial, wb = openxlsx2::wb_load (path)))
+
+}
