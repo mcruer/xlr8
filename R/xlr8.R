@@ -1,59 +1,134 @@
-#' Populate and Style Excel Templates with Data
+#' Write One Excel Report from Data and Metadata
 #'
-#' Automates the workflow of reading metadata from an Excel template,
-#' populating the template with user-provided data, applying original Excel formatting styles,
-#' and saving the final formatted workbook. This function serves as the primary entry point
-#' for creating consistently styled Excel reports from R.
+#' Writes a single Excel workbook using a provided template, data frame, and metadata.
+#' The function populates data, applies formatting styles, and saves the result.
+#' Supports reuse of pre-parsed metadata and preloaded workbooks to enable efficient batching.
 #'
-#' @param df Data frame containing data to populate into the Excel template. Must align with the structure defined in the Excel template metadata.
-#' @param metadata_path File path to the Excel template workbook containing embedded metadata tags that specify variable, table, and column positions and formatting.
-#' @param output_path File path where the final populated and styled Excel workbook will be saved.
-#' @param sheets Optional character vector specifying exact sheet names to read from the template. Defaults to \code{NULL}, in which case sheets matching \code{sheets_regex} are read.
-#' @param sheets_regex Regular expression pattern used to select sheets when \code{sheets} is \code{NULL}. Defaults to \code{"."}, matching all sheets.
+#' @param df A tibble of data to be written. Tables should be list-columns.
+#' @param output_path File path where the formatted Excel workbook will be saved.
+#' @param metadata_path (Optional) Path to the Excel template file with embedded metadata tags.
+#' @param all_info (Optional) Pre-parsed metadata tibble from `summarize_metadata()` (specifically the `all_info` component).
+#' @param wb (Optional) A workbook object loaded using `wb_load()`. Required if `metadata_path` is not used.
+#' @param sheets Optional character vector of sheet names to read when parsing metadata.
+#' @param sheets_regex Optional regular expression for matching sheets. Default is `"."`.
+#' @param overwrite Logical. Whether to overwrite existing files. Default is `FALSE`.
 #'
-#' @return Invisibly returns \code{NULL}. The primary result is the Excel file created and saved at \code{output_path}.
-#'
-#' @details
-#' The \code{xlr8()} function integrates multiple package components to simplify Excel-based reporting:
-#'
-#' \enumerate{
-#'   \item **Metadata Extraction**: Reads structured metadata from an Excel template file using \code{\link{summarize_metadata}}.
-#'   \item **Data Writing**: Writes provided data frame into the Excel workbook according to positions defined in the extracted metadata (\code{\link{write_data}}).
-#'   \item **Style Application**: Extracts and applies original cell formatting (styles) from the Excel template onto the newly written data, preserving formatting consistency (\code{\link{apply_styles}}).
-#'   \item **Output Generation**: Saves the final workbook as a formatted Excel file at the specified output location.
-#' }
-#'
-#' This function assumes the input data (\code{df}) precisely matches the metadata-defined structure embedded within the Excel template. It provides clear error messages if misalignments occur.
+#' @return Invisibly returns `NULL`. The primary result is the saved Excel workbook.
 #'
 #' @examples
 #' \dontrun{
-#' df <- tibble::tibble(name = c("Alice", "Bob"), score = c(92, 85))
+#' # Using only the template path
+#' xlr8_write_one(df, output_path = "out.xlsx", metadata_path = "template.xlsx")
 #'
-#' xlr8(df,
-#'      metadata_path = "template.xlsx",
-#'      output_path = "final_report.xlsx")
+#' # Reusing parsed metadata and workbook
+#' all_info <- summarize_metadata("template.xlsx") %>% pull_cell(all_info)
+#' wb <- wb_load("template.xlsx")
+#' xlr8_write_one(df, output_path = "out.xlsx", all_info = all_info, wb = wb)
 #' }
 #'
+#' @importFrom dplyr pull
+#' @importFrom gplyr pull_cell
+#' @importFrom openxlsx2 wb_load wb_save
 #' @export
-xlr8 <- function (df,
-                  metadata_path,
-                  output_path,
-                  sheets = NULL,
-                  sheets_regex = "."){
+xlr8_write_one <- function(df,
+                           output_path,
+                           metadata_path = NULL,
+                           all_info = NULL,
+                           wb = NULL,
+                           sheets = NULL,
+                           sheets_regex = ".",
+                           overwrite = FALSE) {
 
+  stopifnot(is.data.frame(df), is.character(output_path))
 
-  all_info <- summarize_metadata(metadata_path = metadata_path,
-                                 sheets = sheets,
-                                 sheets_regex = sheets_regex) %>%
-    pull_cell(all_info)
+  if (is.null(all_info)) {
+    if (is.null(metadata_path)) {
+      stop("Must provide either `all_info` or `metadata_path`.")
+    }
+    all_info <- summarize_metadata(
+      metadata_path = metadata_path,
+      sheets = sheets,
+      sheets_regex = sheets_regex
+    ) %>% pull_cell(all_info)
+  }
 
-  loadWorkbook(metadata_path) %>%
+  if (is.null(wb)) {
+    if (is.null(metadata_path)) {
+      stop("Must provide either `wb` or `metadata_path`.")
+    }
+    wb <- wb_load(metadata_path)
+  }
+
+  wb <- wb %>%
     write_data(df, all_info) %>%
-    apply_styles(all_info,
-                 df,
-                 xlsx_cells(metadata_path),
-                 xlsx_formats(metadata_path)
-                 ) %>%
-    saveWorkbook(output_path, overwrite = TRUE)
+    apply_styles(df, all_info) %>%
+    add_formulas(df, all_info)
 
+  wb_save(
+    wb,
+    file = output_path,
+    overwrite = overwrite
+  )
+
+  invisible(NULL)
+}
+
+
+#' Write Multiple Excel Reports from a List-Tibble
+#'
+#' Writes multiple Excel workbooks by mapping over a tibble where each row contains
+#' the data and output path. This function wraps `xlr8_write_one()` and is designed
+#' for batch generation of styled Excel files.
+#'
+#' @param df A tibble with at least two columns:
+#'   - `df`: a list-column of data frames to be written.
+#'   - `output_path`: character column with file paths.
+#' @param metadata_path (Optional) Path to the Excel template to use across all rows.
+#'   Ignored if `all_info` or `wb` is supplied.
+#' @param all_info (Optional) Pre-parsed metadata from `summarize_metadata()`.
+#' @param wb (Optional) A preloaded workbook object from `wb_load()`.
+#' @param sheets Optional character vector of sheet names to read when parsing metadata.
+#' @param sheets_regex Regular expression to match sheet names if `sheets` is NULL.
+#' @param overwrite Logical. Whether to overwrite existing files. Default is `FALSE`.
+#'
+#' @return Invisibly returns the input tibble `df`.
+#'
+#' @importFrom dplyr pull
+#' @importFrom purrr pwalk
+#' @importFrom gplyr pull_cell
+#' @export
+xlr8_write <- function(df,
+                       metadata_path = NULL,
+                       all_info = NULL,
+                       wb = NULL,
+                       sheets = NULL,
+                       sheets_regex = ".",
+                       overwrite = FALSE) {
+
+  stopifnot("df" %in% names(df), "output_path" %in% names(df))
+
+  # Load metadata if needed
+  if (is.null(all_info)) {
+    if (is.null(metadata_path)) stop("Must supply either `all_info` or `metadata_path`.")
+    all_info <- summarize_metadata(metadata_path, sheets, sheets_regex) %>%
+      pull_cell(all_info)
+  }
+
+  # Load workbook if needed
+  if (is.null(wb)) {
+    if (is.null(metadata_path)) stop("Must supply either `wb` or `metadata_path`.")
+    wb <- wb_load(metadata_path)
+  }
+
+  pwalk(df, function(df, output_path) {
+    xlr8_write_one(
+      df = df,
+      output_path = output_path,
+      all_info = all_info,
+      wb = wb,
+      overwrite = overwrite
+    )
+  })
+
+  invisible(df)
 }
