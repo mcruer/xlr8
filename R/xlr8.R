@@ -1,3 +1,47 @@
+validate_data_to_write <- function(df, all_info) {
+
+  all_info <- all_info %>%
+    filter_in_na(formula_location)
+
+  make_check_key <- function(level1, level2) {
+    paste0(level1, tidyr::replace_na(level2, ""))
+  }
+
+  flatten_nested_tibble <- function(df) {
+    purrr::imap_dfr(df, function(col, name) {
+      if (!is.list(col)) {
+        tibble::tibble(level1 = name, level2 = NA_character_)
+      } else {
+        purrr::map_dfr(col, function(x) {
+          if (tibble::is_tibble(x)) {
+            tibble::tibble(level1 = name, level2 = names(x))
+          } else {
+            tibble::tibble(level1 = name, level2 = NA_character_)
+          }
+        })
+      }
+    })
+  }
+
+  required <- all_info %>%
+    dplyr::mutate(check = make_check_key(tbl, col_name))
+
+  available <- flatten_nested_tibble(df) %>%
+    dplyr::mutate(check = make_check_key(level1, level2)) %>%
+    dplyr::distinct(check)
+
+  missing_data_check <- dplyr::anti_join(required, available, by = "check") %>%
+    dplyr::select(sheet_name, tbl, col_name, row_start, col_start)
+
+  if (nrow(missing_data_check) > 0) {
+    print(missing_data_check)
+    stop("See tibble above. Data provided is not available for these required output variables.")
+  }
+
+  invisible(NULL)
+}
+
+
 #' Write One Excel Report from Data and Metadata
 #'
 #' Writes a single Excel workbook using a provided template, data frame, and metadata.
@@ -58,6 +102,10 @@ xlr8_write_one <- function(df,
     }
     wb <- wb_load(metadata_path)
   }
+
+
+  #Check if the df contains all the necessary data to write to the sheet.
+  validate_data_to_write(df, all_info)
 
   wb <- wb %>%
     write_data(df, all_info) %>%

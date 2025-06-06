@@ -53,8 +53,14 @@
 #'
 #' @importFrom listful pbuild
 #' @export
-
 write_data <- function(wb, df, all_info) {
+
+  #Remove formulas so that they don't throw an error if there isn't a value
+  #in the df for a variable that will be written as a formula in the spreadsheet
+  #regardless.
+  all_info_write <- all_info %>%
+    filter_in_na(formula_location)
+
 
   wb_add_data_customized <- function(wb, x, sheet, start_col, start_row) {
     openxlsx2::wb_add_data(
@@ -69,7 +75,7 @@ write_data <- function(wb, df, all_info) {
   }
 
   # Write tables
-  table_list <- all_info_cols(all_info, df) %>%
+  table_list <- all_info_cols(all_info_write, df) %>%
     select(
       x = data,
       sheet = sheet_name,
@@ -81,7 +87,7 @@ write_data <- function(wb, df, all_info) {
     pbuild(table_list, wb_add_data_customized)
 
   # Write variables (single-cell values)
-  variable_list <- all_info_vars(all_info, df) %>%
+  variable_list <- all_info_vars(all_info_write, df) %>%
     select(
       x = data,
       sheet = sheet_name,
