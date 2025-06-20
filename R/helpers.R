@@ -19,7 +19,7 @@ utils::globalVariables(c(
   "column", "dims", "form_metadata", "form_name", "formula_location",
   "key_matches", "keys", "okay", "problem", "raw_df", "reference",
   "row_id", "shifted", "step_1", "step_1_length", "table_end_tbl",
-  "tag", "tag_count", "unknown_keys", "x1"
+  "tag", "tag_count", "unknown_keys", "x1", "info", "check", "level1", "level2"
 ))
 
 

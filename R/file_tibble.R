@@ -1,3 +1,123 @@
+#' Retrieve File Information for a Single Path
+#'
+#' This function returns a tibble with details about files in a given folder path.
+#'
+#' @param folder_path Character. The path of the folder from which files' information is to be extracted.
+#' @param file_type Character. Type or extension of the files to be considered. Default is "." (all files).
+#' @param recursive Logical. Should files from subdirectories also be included? Default is FALSE.
+#' @param filter_out_tilda Logical. Should files with names containing a tilde (~) be excluded? Default is TRUE.
+#'
+#' @return A tibble containing columns: file (name of the file), path (complete path of the file),
+#' size (file size), isdir (is it a directory?), and mtime (last modification time).
+#'
+#' @importFrom fs path
+#' @importFrom stringr str_detect str_c str_sub
+#' @importFrom purrr map
+#' @importFrom tibble tibble
+#' @importFrom dplyr select filter
+#' @importFrom tidyr unnest
+#' @importFrom gplyr filter_in
+#' @examples
+#' \dontrun{
+#' file_tibble_single_path(folder_path = "./my_directory")
+#' }
+#' @keywords internal
+file_tibble_single_path <- function (folder_path,
+                                     file_type = ".",
+                                     recursive = FALSE,
+                                     filter_out_tilda = TRUE) {
+
+  if (str_sub(folder_path, start = -1L) != "/") {
+    folder_path <- str_c(folder_path, "/")
+  }
+
+  tibble(
+    file = list.files(folder_path, recursive = recursive),
+    path = path(folder_path, file),
+    info = map(path, ~ .x |>
+                 file.info() |>
+                 tibble() |>
+                 select(size, isdir, mtime))
+  ) |>
+    unnest(info) |>
+    filter_in(file, str_c(file_type, "$")) |>
+    filter(!(filter_out_tilda & str_detect(file, "~")))
+}
+
+
+#' Re-Nest Metadata
+#'
+#' This function aggregates file information from multiple folder paths into a single tibble.
+#'
+#' @param df A dataframe containing columns to be contained within the metadata column.
+#'
+#' @return A tibble with a nested metadata column.
+#'
+#' @importFrom tidyr nest
+#' @importFrom dplyr any_of
+#' @export
+nest_metadata <- function (df) {
+  metadata_columns <- c(
+    "folder_paths",
+    "file_type",
+    "recursive",
+    "filter_out_tilda",
+    "size",
+    "isdir",
+    "mtime",
+    "update_needed_raw",
+    "update_needed_form",
+    "form_name_version",
+    "sheets",
+    "sheets_regex"
+  )
+
+  nest(df, metadata = any_of(metadata_columns))
+}
+
+#' Retrieve File Information for Multiple Paths
+#'
+#' This function aggregates file information from multiple folder paths into a single tibble.
+#'
+#' @param folder_paths Character vector. Paths of the folders from which files' information is to be extracted.
+#' @param file_type Character. Type or extension of the files to be considered. Default is "." (all files).
+#' @param recursive Logical. Should files from subdirectories also be included? Default is FALSE.
+#' @param filter_out_tilda Logical. Should files with names containing a tilde (~) be excluded? Default is TRUE.
+#'
+#' @return A tibble with one row per unique file-path combination, with columns: folder_paths (list of all folder paths provided),
+#' file_type (type of the file considered), recursive (were subdirectories included?), filter_out_tilda (were files with tildes excluded?),
+#' file (name of the file), path (complete path of the file), and metadata (a list column containing details like size, isdir, and mtime).
+#'
+#' @importFrom purrr map
+#' @importFrom dplyr bind_rows mutate
+#' @export
+file_tibble <- function (folder_paths,
+                         file_type = ".",
+                         recursive = FALSE,
+                         filter_out_tilda = TRUE) {
+
+  bind_rows(
+    map(folder_paths,
+        file_tibble_single_path,
+        file_type = file_type,
+        recursive = recursive,
+        filter_out_tilda = filter_out_tilda)
+  ) |>
+    mutate(
+      folder_paths = list(folder_paths),
+      file_type = file_type,
+      recursive = recursive,
+      filter_out_tilda = filter_out_tilda,
+      update_needed_raw = TRUE,
+      update_needed_form = TRUE,
+      .before = 1
+    ) |>
+    nest_metadata()
+}
+
+
+
+
 
 #' Read and Extract Structured Data from Excel Files in a Folder
 #'
@@ -32,7 +152,6 @@
 #' @importFrom dplyr mutate select left_join distinct
 #' @importFrom tidyr unnest
 #' @importFrom tibble tibble
-#' @importFrom databased file_tibble
 #' @export
 xlr8_read_folder <- function (path,
                               recursive = FALSE,

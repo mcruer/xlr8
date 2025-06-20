@@ -2,6 +2,7 @@
 % Please edit documentation in R/xlr8_documentation.R
 \docType{package}
 \name{xlr8}
+\alias{xlr8-package}
 \alias{xlr8}
 \title{xlr8: Automate Excel Reports with Template-Based Data and Styling}
 \description{
