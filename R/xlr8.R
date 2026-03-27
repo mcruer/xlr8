@@ -1,5 +1,18 @@
 validate_data_to_write <- function(df, all_info) {
 
+  bad_list_cols <- df %>%
+    select(where(is.list)) %>%
+    purrr::keep(~ any(!purrr::map_lgl(.x, is.data.frame))) %>%
+    names()
+
+  if (length(bad_list_cols) > 0) {
+    stop(
+      "All list columns in `df` must contain data frames (tibbles), but the following do not:\n",
+      paste0("  - ", bad_list_cols, collapse = "\n"), "\n",
+      "When generating this data, did you use `map_lgl()`, `map_chr()`, or `map_dbl()` instead of `map()`?"
+    )
+  }
+
   all_info <- all_info %>%
     filter_in_na(formula_location)
 
