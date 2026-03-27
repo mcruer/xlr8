@@ -16,10 +16,14 @@
 #'
 #' @export
 apply_styles <- function(wb, df, all_info) {
-  table_lengths <- df %>%
-    select(where(is.list)) %>%
-    pivot_longer(cols = everything(), names_to = "tbl", values_to = "table_length") %>%
-    quickm(table_length, ~ map_int(.x, nrow))
+  list_df <- df %>% select(where(is.list))
+  table_lengths <- if (ncol(list_df) == 0) {
+    tibble(tbl = character(), table_length = integer())
+  } else {
+    list_df %>%
+      pivot_longer(cols = everything(), names_to = "tbl", values_to = "table_length") %>%
+      quickm(table_length, ~ map_int(.x, nrow))
+  }
 
   style_map <- all_info %>%
     left_join(table_lengths, by = "tbl") %>%
