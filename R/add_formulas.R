@@ -34,6 +34,10 @@
 #' @importFrom tibble tibble
 #' @export
 add_formulas <- function (wb, df, all_info) {
+  if (!("formula_to_write" %in% names(all_info)) || all(is.na(all_info$formula_to_write))) {
+    return(wb)
+  }
+
   list_formulas <- function(formula, row_start, col_start, row_end) {
     tibble(
       formula = formula,
