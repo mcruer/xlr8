@@ -57,7 +57,11 @@ add_formulas <- function (wb, df, all_info) {
     left_join(table_lengths, by = "tbl") %>%
     mutate(row_end = if_else(is.na(row_end), row_start + table_length - 1, row_end)) %>%
     select(sheet = sheet_name, formula_to_write, row_start, col_start, row_end) %>%
-    filter_out_na(formula_to_write) %>%
+    filter_out_na(formula_to_write)
+
+  if (nrow(formula_map) == 0) return(wb)
+
+  formula_map <- formula_map %>%
     rename(formula = formula_to_write) %>%
     mutate(formulas = pmap(list(formula, row_start, col_start, row_end), list_formulas)) %>%
     select(sheet, formulas) %>%
