@@ -35,6 +35,21 @@ This vignette details how to create Excel templates compatible with `xlr8` by em
     *((table_end
     ```
 
+- **Fan sheets** (render one Excel tab per record instead of one table row):
+  - Tag a sheet as a fan by placing this tag anywhere on it (often in a hidden cell):
+    ```
+    *((fan*((table_name*((fan_tab_name*((naming_column
+    ```
+  - Tag each field on the page with a `col` tag in its own cell (not `var`):
+    ```
+    *((col*((field_name
+    ```
+  - At write time the sheet is cloned once per row of `table_name`, and each clone
+    is named from that row's `naming_column` value. At read time the tabs are
+    recombined into the same nested table a flat table would produce — so your R
+    data is identical either way. A fan sheet may not also contain `var` tags or a
+    normal `tbl`/`table_end` table.
+
 # Step-by-Step Tagging Guide
 
 ## Step 1: Tagging Variables

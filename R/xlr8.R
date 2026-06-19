@@ -65,6 +65,7 @@ validate_data_to_write <- function(df, all_info) {
 #' @param output_path File path where the formatted Excel workbook will be saved.
 #' @param metadata_path (Optional) Path to the Excel template file with embedded metadata tags.
 #' @param all_info (Optional) Pre-parsed metadata tibble from `summarize_metadata()` (specifically the `all_info` component).
+#' @param fan_info (Optional) Pre-parsed fan metadata from `summarize_metadata()` (the `fan_info` component). When omitted and `metadata_path` is supplied, it is derived automatically. Supply explicitly when also supplying `all_info`/`wb` directly and the template contains fan sheets.
 #' @param wb (Optional) A workbook object loaded using `wb_load()`. Required if `metadata_path` is not used.
 #' @param sheets Optional character vector of sheet names to read when parsing metadata.
 #' @param sheets_regex Optional regular expression for matching sheets. Default is `"."`.
@@ -91,6 +92,7 @@ xlr8_write_one <- function(df,
                            output_path,
                            metadata_path = NULL,
                            all_info = NULL,
+                           fan_info = NULL,
                            wb = NULL,
                            sheets = NULL,
                            sheets_regex = ".",
@@ -102,11 +104,15 @@ xlr8_write_one <- function(df,
     if (is.null(metadata_path)) {
       stop("Must provide either `all_info` or `metadata_path`.")
     }
-    all_info <- summarize_metadata(
+    metadata <- summarize_metadata(
       metadata_path = metadata_path,
       sheets = sheets,
       sheets_regex = sheets_regex
-    ) %>% pull_cell(all_info)
+    )
+    all_info <- metadata %>% pull_cell(all_info)
+    if (is.null(fan_info)) {
+      fan_info <- metadata %>% pull_cell(fan_info)
+    }
   }
 
   if (is.null(wb)) {
@@ -116,6 +122,31 @@ xlr8_write_one <- function(df,
     wb <- wb_load(metadata_path)
   }
 
+  has_fans <- !is.null(fan_info) && nrow(fan_info) > 0
+
+  if (has_fans) {
+    # expand_fan_sheets() removes the template sheet, mutating the
+    # reference-semantics workbook in place. When a single `wb` is reused across
+    # several writes (the batch path), each call must start from an intact
+    # template. Reloading from `metadata_path` is the safest source of a fresh
+    # copy; fall back to an R6 deep clone only when a `wb` was supplied directly.
+    if (!is.null(metadata_path)) {
+      wb <- wb_load(metadata_path)
+    } else {
+      wb <- tryCatch(
+        wb$clone(deep = TRUE),
+        error = function(e) {
+          stop("Fan sheets require a cloneable workbook or a `metadata_path` to ",
+               "reload from for each write. Could not clone `wb`: ",
+               conditionalMessage(e), call. = FALSE)
+        }
+      )
+    }
+
+    expansion <- expand_fan_sheets(wb, df, all_info, fan_info)
+    wb <- expansion$wb
+    all_info <- expansion$all_info
+  }
 
   #Check if the df contains all the necessary data to write to the sheet.
   validate_data_to_write(df, all_info)
@@ -147,6 +178,7 @@ xlr8_write_one <- function(df,
 #' @param metadata_path (Optional) Path to the Excel template to use across all rows.
 #'   Ignored if `all_info` or `wb` is supplied.
 #' @param all_info (Optional) Pre-parsed metadata from `summarize_metadata()`.
+#' @param fan_info (Optional) Pre-parsed fan metadata from `summarize_metadata()`. Derived automatically when `metadata_path` is supplied.
 #' @param wb (Optional) A preloaded workbook object from `wb_load()`.
 #' @param sheets Optional character vector of sheet names to read when parsing metadata.
 #' @param sheets_regex Regular expression to match sheet names if `sheets` is NULL.
@@ -161,6 +193,7 @@ xlr8_write_one <- function(df,
 xlr8_write <- function(df,
                        metadata_path = NULL,
                        all_info = NULL,
+                       fan_info = NULL,
                        wb = NULL,
                        sheets = NULL,
                        sheets_regex = ".",
@@ -171,8 +204,11 @@ xlr8_write <- function(df,
   # Load metadata if needed
   if (is.null(all_info)) {
     if (is.null(metadata_path)) stop("Must supply either `all_info` or `metadata_path`.")
-    all_info <- summarize_metadata(metadata_path, sheets, sheets_regex) %>%
-      pull_cell(all_info)
+    metadata <- summarize_metadata(metadata_path, sheets, sheets_regex)
+    all_info <- metadata %>% pull_cell(all_info)
+    if (is.null(fan_info)) {
+      fan_info <- metadata %>% pull_cell(fan_info)
+    }
   }
 
   # Load workbook if needed
@@ -185,7 +221,9 @@ xlr8_write <- function(df,
     xlr8_write_one(
       df = df,
       output_path = output_path,
+      metadata_path = metadata_path,
       all_info = all_info,
+      fan_info = fan_info,
       wb = wb,
       overwrite = overwrite
     )

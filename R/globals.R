@@ -10,5 +10,6 @@ utils::globalVariables(c(
   "table_end", "table_end_row", "table_length", "textDecoration",
   "tbl", "value", "var", "path", "property", "numFmt",
   "protection_hidden", "protection_locked", "openxlsx_style",
-  "local_format_id", "sheet", "name", "row_end"
+  "local_format_id", "sheet", "name", "row_end",
+  "fan_tbl", "fan_tab_name_col", "fan_info", "fan_tab_name"
 ))

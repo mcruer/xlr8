@@ -102,6 +102,8 @@ summarize_metadata_from_raw_template <- function(raw_template) {
       tbl = target_extraction(value, "tbl"),
       col_name = target_extraction(value, "col"),
       table_end_tbl = target_extraction(value, "table_end"),
+      fan_tbl = target_extraction(value, "fan"),
+      fan_tab_name_col = target_extraction(value, "fan_tab_name"),
       formula_location_raw = target_extraction(value, "formula"),
       formula_location = resolve_formula_reference(formula_location_raw, row, col)
     )
@@ -110,23 +112,55 @@ summarize_metadata_from_raw_template <- function(raw_template) {
   tags_info <- full_tags %>%
     select(sheet_name, row, col, value)
 
+  # Fan metadata: one row per fan-tagged cell. Captures the fan's table name
+  # (fan_tbl) and the column whose value names each cloned sheet's tab
+  # (fan_tab_name_col). A sheet carrying a fan tag is a "fan sheet": at write
+  # time it is cloned once per row of its table, and on these sheets the
+  # forward-fill table logic below must NOT run (each `col` tag belongs to the
+  # fan purely by sheet membership, not document order).
+  fan_info <- full_tags %>%
+    filter_out_na(fan_tbl) %>%
+    select(sheet_name, row, col, tbl = fan_tbl, fan_tab_name_col)
+
+  fan_sheets <- unique(fan_info$sheet_name)
+
+  # Split tags: normal table/var logic runs only on non-fan sheets; fan-sheet
+  # columns get a separate, simpler single-cell extraction (see below).
+  full_tags_normal <- full_tags %>%
+    filter(!(sheet_name %in% fan_sheets))
+  full_tags_fan <- full_tags %>%
+    filter(sheet_name %in% fan_sheets)
+
+  # Fan-sheet columns: each `col` tag on a fan sheet is an independent single
+  # cell (row_start == row_end, col_start == col_end), structurally identical
+  # to a reformed variable but keyed by (tbl, col_name) and associated with its
+  # fan's table by sheet membership.
+  fan_column_info_reformed <- full_tags_fan %>%
+    filter(!is.na(col_name)) %>%
+    select(-tbl) %>%   # drop the (NA) tbl from tag parsing; take it from fan_info
+    left_join(fan_info %>% select(sheet_name, tbl), by = "sheet_name") %>%
+    rename(row_start = row, col_start = col) %>%
+    mutate(row_end = row_start, col_end = col_start) %>%
+    select(sheet_name, tbl, col_name, row_start, row_end,
+           col_start, col_end, formula_location)
+
   # Variable metadata
   variable_info <- full_tags %>%
     filter(!is.na(var)) %>%
     select(sheet_name, row, col, var, formula_location)
 
-  end_rows <- full_tags %>%
+  end_rows <- full_tags_normal %>%
     filter_out_na(table_end_tbl) %>%
     select(sheet_name, tbl = table_end_tbl, end_row = row)
 
-  table_lengths <- full_tags %>%
+  table_lengths <- full_tags_normal %>%
     filter_out_na(tbl) %>%
     group_by(sheet_name, tbl) %>%
     summarise(.groups = "drop") %>%
     left_join(end_rows, by = c("sheet_name", "tbl"))
 
   # Extract columns within tables
-  table_info_interim <- full_tags %>%
+  table_info_interim <- full_tags_normal %>%
     filter(!is.na(col_name)) %>%
     arrange(sheet_name, row, col) %>%
     group_by(sheet_name) %>%                         # 👈 FIXED SCOPE
@@ -165,7 +199,7 @@ summarize_metadata_from_raw_template <- function(raw_template) {
       ) %>%
       ungroup()
 
-    column_info <- full_tags %>%
+    column_info <- full_tags_normal %>%
       filter(!is.na(col_name)) %>%
       arrange(sheet_name, row, col) %>%
       group_by(sheet_name) %>%                       # 👈 FIXED SCOPE
@@ -177,8 +211,12 @@ summarize_metadata_from_raw_template <- function(raw_template) {
       ungroup()
   }
 
-  # Reformat variable_info to match table_info structure
+  # Reformat variable_info to match table_info structure. Vars that landed on a
+  # fan sheet are an authoring error (caught by validate_metadata); exclude them
+  # from all_info here so the written metadata stays clean, while variable_info
+  # itself still carries them so validation can report them.
   variable_info_reformed <- variable_info %>%
+    filter(!(sheet_name %in% fan_sheets)) %>%
     rename(tbl = var,
            row_start = row,
            col_start = col) %>%
@@ -194,6 +232,7 @@ summarize_metadata_from_raw_template <- function(raw_template) {
     ) %>%
     select(-col) %>%
     bind_rows(variable_info_reformed) %>%
+    bind_rows(fan_column_info_reformed) %>%
     mutate(
       form = form,
       row_id = if_else(is.na(col_name),
@@ -232,7 +271,8 @@ summarize_metadata_from_raw_template <- function(raw_template) {
     variable_info = list(variable_info),
     table_info = list(table_info),
     column_info = list(column_info),
-    all_info = list(all_info)
+    all_info = list(all_info),
+    fan_info = list(fan_info)
   )
 }
 
@@ -255,7 +295,7 @@ summarize_metadata_from_raw_template <- function(raw_template) {
 #' @importFrom tibble tibble
 #'
 #' @export
-validate_metadata_tags <- function(tag_values, allowed_keys = c("var", "tbl", "col", "formula", "table_end")) {
+validate_metadata_tags <- function(tag_values, allowed_keys = c("var", "tbl", "col", "formula", "table_end", "fan", "fan_tab_name")) {
   tag_df <- tibble(value = tag_values)
 
   tag_df <- tag_df %>%
@@ -302,6 +342,16 @@ validate_metadata <- function(metadata, quiet = FALSE, fail_on_issue = TRUE) {
 
   all_info <- pull_cell(metadata, all_info)
 
+  # fan_info may be absent if metadata came from an older summarize call; treat
+  # a missing column as "no fans".
+  fan_info <- if ("fan_info" %in% names(metadata)) {
+    pull_cell(metadata, fan_info)
+  } else {
+    tibble(sheet_name = character(), row = double(), col = double(),
+           tbl = character(), fan_tab_name_col = character())
+  }
+  fan_sheets <- unique(fan_info$sheet_name)
+
   check <- all_info %>%
     full_join(tags_info %>%
                 rename(
@@ -344,11 +394,51 @@ validate_metadata <- function(metadata, quiet = FALSE, fail_on_issue = TRUE) {
     filter_in_na(tag, tbl, if_any_or_all = "if_any") %>%
     mutate(problem = "Some Other Issue")
 
+  # Fan-specific structural checks. Each produces a problem tibble with the same
+  # row_start/col_start/tbl/col_name/tag columns the final assembly expects.
+
+  # Check A: var tags are forbidden on a fan sheet (fan sheets use col tags only).
+  vars_on_fan_sheets <- variable_info %>%
+    filter(sheet_name %in% fan_sheets) %>%
+    rename(tag = var, row_start = row, col_start = col) %>%
+    mutate(
+      tbl = NA_character_,
+      col_name = NA_character_,
+      problem = "Var Tag on a Fan Sheet (fan sheets may only use col tags)"
+    )
+
+  # Check B: a given table name may be fanned by at most one sheet.
+  duplicate_fan_tables <- fan_info %>%
+    get_dupes(tbl) %>%
+    rename(row_start = row, col_start = col) %>%
+    mutate(
+      tag = NA_character_,
+      col_name = NA_character_,
+      problem = "Table Name Declared as a Fan on More Than One Sheet"
+    ) %>%
+    suppressMessages()
+
+  # Check C: a fan sheet cannot also carry a normal table (tbl/table_end) or a
+  # nested table. Scan raw tag text so unresolved/orphaned tags are still caught.
+  tbl_or_end_on_fan_sheets <- tags_info %>%
+    filter(sheet_name %in% fan_sheets) %>%
+    filter_in(value, "\\*\\(\\(tbl\\*\\(\\(|\\*\\(\\(table_end") %>%
+    rename(tag = value, row_start = row, col_start = col) %>%
+    mutate(
+      tbl = NA_character_,
+      col_name = NA_character_,
+      problem = "Fan Sheet Also Contains a Table (tbl/table_end) - Not Allowed"
+    )
+
   all_errors <- bind_rows(duplicate_tags, other_errors) %>%
     bind_rows(white_space) %>%
     bind_rows(unballanced_tags) %>%
     filter_out(tag, "\\*\\(\\(table_end") %>%
+    filter_out(tag, "\\*\\(\\(fan\\*\\(\\(") %>%
     bind_rows(ghost_table_ends) %>%
+    bind_rows(vars_on_fan_sheets) %>%
+    bind_rows(duplicate_fan_tables) %>%
+    bind_rows(tbl_or_end_on_fan_sheets) %>%
     rowwise() %>%
     mutate(reference = wb_dims(row_start, col_start), .after = sheet_name
     ) %>%
