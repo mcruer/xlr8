@@ -51,3 +51,10 @@
 * `xlr8_read()`'s internal table extraction now guards against an inverted row
   range (`row_end < row_start`), which previously could return reversed rows
   instead of an empty result.
+
+* `xlr8_read()` no longer drops every row of its result when a template has no
+  flat-table columns at all (e.g. only `var`s and/or fan tables). The internal
+  `tables` piece degenerates to a literal zero-column `tibble()` in that case,
+  which previously forced the final `bind_cols()` down to zero rows even though
+  `vars`/the fan tables had one; such empty pieces are now excluded from the
+  bind.

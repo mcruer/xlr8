@@ -96,7 +96,7 @@ summarize_metadata_from_raw_template <- function(raw_template) {
     to_number(name) %>%
     rename(col = name) %>%
     relocate(row, col, .after = sheet_name) %>%
-    filter_in(value, str_c("^", xlr8_tag), na.rm = TRUE) %>%
+    filter_in_str(value, str_c("^", xlr8_tag), na.rm = TRUE) %>%
     mutate(
       var = target_extraction(value, "var"),
       tbl = target_extraction(value, "tbl"),
@@ -328,10 +328,10 @@ validate_metadata_tags <- function(tag_values, allowed_keys = c("var", "tbl", "c
 #' @importFrom tidyr unnest
 #' @importFrom purrr map_chr map2
 #' @importFrom stringr str_count fixed
-#' @importFrom gplyr filter_in filter_out_na filter_in_na
+#' @importFrom gplyr filter_in_str filter_out_na filter_in_na
 #' @importFrom openxlsx2 wb_dims
 #' @importFrom janitor get_dupes
-#' @importFrom gplyr filter_out
+#' @importFrom gplyr filter_out_str
 #' @export
 validate_metadata <- function(metadata, quiet = FALSE, fail_on_issue = TRUE) {
 
@@ -364,7 +364,7 @@ validate_metadata <- function(metadata, quiet = FALSE, fail_on_issue = TRUE) {
     suppressMessages()
 
   ghost_table_ends <- tags_info %>%
-    filter_in(value, "\\*\\(\\(table_end") %>%
+    filter_in_str(value, "\\*\\(\\(table_end") %>%
     mutate(table = target_extraction(value, "table_end")) %>%
     left_join(table_info %>% select(table = tbl) %>% mutate(okay = TRUE)) %>%
     filter_in_na(okay) %>%
@@ -375,7 +375,7 @@ validate_metadata <- function(metadata, quiet = FALSE, fail_on_issue = TRUE) {
 
 
   white_space <- check %>%
-    filter_in(tag, "\\s", na.rm = TRUE) %>%
+    filter_in_str(tag, "\\s", na.rm = TRUE) %>%
     mutate(problem = "Whitespace in Tag")
 
   unballanced_tags <- tags_info  %>%
@@ -422,7 +422,7 @@ validate_metadata <- function(metadata, quiet = FALSE, fail_on_issue = TRUE) {
   # nested table. Scan raw tag text so unresolved/orphaned tags are still caught.
   tbl_or_end_on_fan_sheets <- tags_info %>%
     filter(sheet_name %in% fan_sheets) %>%
-    filter_in(value, "\\*\\(\\(tbl\\*\\(\\(|\\*\\(\\(table_end") %>%
+    filter_in_str(value, "\\*\\(\\(tbl\\*\\(\\(|\\*\\(\\(table_end") %>%
     rename(tag = value, row_start = row, col_start = col) %>%
     mutate(
       tbl = NA_character_,
@@ -433,8 +433,8 @@ validate_metadata <- function(metadata, quiet = FALSE, fail_on_issue = TRUE) {
   all_errors <- bind_rows(duplicate_tags, other_errors) %>%
     bind_rows(white_space) %>%
     bind_rows(unballanced_tags) %>%
-    filter_out(tag, "\\*\\(\\(table_end") %>%
-    filter_out(tag, "\\*\\(\\(fan\\*\\(\\(") %>%
+    filter_out_str(tag, "\\*\\(\\(table_end") %>%
+    filter_out_str(tag, "\\*\\(\\(fan\\*\\(\\(") %>%
     bind_rows(ghost_table_ends) %>%
     bind_rows(vars_on_fan_sheets) %>%
     bind_rows(duplicate_fan_tables) %>%

@@ -12,6 +12,5 @@
 #'
 #' For more detailed workflows and examples, see the package vignettes and documentation for individual functions.
 #'
-#' @docType package
 #' @name xlr8
-NULL
+"_PACKAGE"

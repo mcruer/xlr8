@@ -16,7 +16,7 @@
 #' @importFrom tibble tibble
 #' @importFrom dplyr select filter
 #' @importFrom tidyr unnest
-#' @importFrom gplyr filter_in
+#' @importFrom gplyr filter_in_str
 #' @examples
 #' \dontrun{
 #' file_tibble_single_path(folder_path = "./my_directory")
@@ -40,7 +40,7 @@ file_tibble_single_path <- function (folder_path,
                  select(size, isdir, mtime))
   ) |>
     unnest(info) |>
-    filter_in(file, str_c(file_type, "$")) |>
+    filter_in_str(file, str_c(file_type, "$")) |>
     filter(!(filter_out_tilda & str_detect(file, "~")))
 }
 

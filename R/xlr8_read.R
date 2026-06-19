@@ -140,16 +140,25 @@ xlr8_read <- function(raw_df, all_info, fix_dates_regex = "date_|_date|^date$",
     tables <- tibble()
   }
 
+  pieces <- list(vars, tables)
+
   if (has_fans) {
     fan_tables <- collapse_fan_sheets(raw_df, all_info_full, fan_info)
     if (!is.null(fix_dates_regex)) {
       fan_tables <- fan_tables %>%
         quickm(everything(), map, fix_dates_function)
     }
-    bind_cols(vars, tables, fan_tables)
-  } else {
-    bind_cols(vars, tables)
+    pieces <- c(pieces, list(fan_tables))
   }
+
+  # A piece with no columns (e.g. `tables` when a template has no flat-table
+  # columns at all -- only vars and/or fan tables) is a literal `tibble()`
+  # produced by `pivot_wider()` on zero input rows. Including it in `bind_cols()`
+  # would force the whole result down to zero rows even though the other pieces
+  # have one; drop such pieces instead, since they carry no information.
+  pieces <- pieces[vapply(pieces, ncol, integer(1)) > 0]
+
+  if (length(pieces) == 0) tibble() else do.call(bind_cols, pieces)
 }
 
 #' Reconstruct Fan-Rendered Tables from Their Per-Sheet Instances
@@ -172,7 +181,7 @@ xlr8_read <- function(raw_df, all_info, fix_dates_regex = "date_|_date|^date$",
 #' @importFrom tidyr pivot_longer
 #' @importFrom purrr map pmap
 #' @importFrom tibble as_tibble tibble
-#' @importFrom gplyr filter_in parse_guess_all
+#' @importFrom gplyr filter_in_str parse_guess_all
 #' @importFrom stringr str_c
 #' @importFrom stats setNames
 #' @keywords internal
@@ -191,7 +200,7 @@ collapse_fan_sheets <- function(raw_df, all_info, fan_info) {
   # Cells whose surviving text is a fan tag identify each fan-instance sheet.
   fan_tag_cells <- raw_df %>%
     pivot_longer(-c(row, sheet_name)) %>%
-    filter_in(value, str_c("^", xlr8_tag), na.rm = TRUE) %>%
+    filter_in_str(value, str_c("^", xlr8_tag), na.rm = TRUE) %>%
     mutate(fan_tbl = target_extraction(value, "fan")) %>%
     filter(!is.na(fan_tbl))
 

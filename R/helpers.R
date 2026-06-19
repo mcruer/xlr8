@@ -35,7 +35,7 @@ utils::globalVariables(c(
 #' @importFrom magrittr %>%
 #' @importFrom rlang .data
 #' @importFrom gplyr quickm filter_out_na filter_in_na to_number pull_cell replace_with_na quicks
-#' @importFrom gplyr filter_in parse_guess_all
+#' @importFrom gplyr filter_in_str parse_guess_all
 #' @importFrom tidyxl xlsx_cells xlsx_formats
 #' @importFrom dplyr rowwise
 #' @importFrom stats na.omit
