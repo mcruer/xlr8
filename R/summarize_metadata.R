@@ -52,10 +52,10 @@ target_extraction <- function(string, target) {
 #'   \item{all_info}{Unified metadata for writing and styling workflows.}
 #' }
 #'
-#' @importFrom dplyr mutate select filter arrange group_by ungroup rename relocate summarise bind_rows if_else
+#' @importFrom dplyr mutate select filter arrange group_by ungroup rename relocate summarise bind_rows if_else left_join
 #' @importFrom tidyr pivot_longer fill
-#' @importFrom stringr str_c str_remove
-#' @importFrom purrr map_chr map
+#' @importFrom stringr str_c str_remove str_detect
+#' @importFrom purrr map_chr map map2_dbl
 #' @importFrom gplyr replace_with_na filter_out_na
 #' @importFrom tibble tibble
 #'
@@ -149,15 +149,50 @@ summarize_metadata_from_raw_template <- function(raw_template) {
     filter(!is.na(var)) %>%
     select(sheet_name, row, col, var, formula_location)
 
+  # A *named* `*((table_end*((<tbl>` ends that one table by name. A *bare*
+  # `*((table_end` (no name -- the grammar shown in the vignettes) has no name
+  # to join on; it ends every table on its sheet that doesn't already have a
+  # named end and started at or before it (the common case is exactly one such
+  # table, but several tables starting on the same row may share one bare
+  # marker, as in inst/extdata/example_metadata.xlsx).
   end_rows <- full_tags_normal %>%
     filter_out_na(table_end_tbl) %>%
     select(sheet_name, tbl = table_end_tbl, end_row = row)
 
-  table_lengths <- full_tags_normal %>%
-    filter_out_na(tbl) %>%
-    group_by(sheet_name, tbl) %>%
-    summarise(.groups = "drop") %>%
-    left_join(end_rows, by = c("sheet_name", "tbl"))
+  bare_end_rows <- full_tags_normal %>%
+    filter(str_detect(value, str_c(xlr8_tag, "table_end")), is.na(table_end_tbl)) %>%
+    select(sheet_name, end_row = row)
+
+  nearest_bare_end <- function(sheet_name, start_row) {
+    candidates <- bare_end_rows$end_row[
+      bare_end_rows$sheet_name == sheet_name & bare_end_rows$end_row >= start_row
+    ]
+    if (length(candidates) == 0) NA_real_ else min(candidates)
+  }
+
+  # `min(row)` on a zero-row group (no flat tables at all -- e.g. a fan-only
+  # template) warns "no non-missing arguments to min" despite correctly
+  # producing a zero-row result; suppress that spurious warning.
+  table_lengths <- suppressWarnings(
+    full_tags_normal %>%
+      filter_out_na(tbl) %>%
+      group_by(sheet_name, tbl) %>%
+      summarise(start_row = min(row), .groups = "drop")
+  ) %>%
+    left_join(end_rows, by = c("sheet_name", "tbl")) %>%
+    mutate(
+      end_row = if_else(
+        is.na(end_row),
+        map2_dbl(sheet_name, start_row, nearest_bare_end),
+        end_row
+      ),
+      # `end_row` so far is the row the `table_end` marker itself sits on, one
+      # past the last real data row. Step back one row so it bounds the data,
+      # not the marker -- otherwise the marker row is read back as a trailing
+      # garbage data row.
+      end_row = end_row - 1
+    ) %>%
+    select(-start_row)
 
   # Extract columns within tables
   table_info_interim <- full_tags_normal %>%
@@ -363,10 +398,21 @@ validate_metadata <- function(metadata, quiet = FALSE, fail_on_issue = TRUE) {
     select(-row_id) %>%
     suppressMessages()
 
+  # A *named* `*((table_end*((<tbl>` is a ghost if no table with that name was
+  # resolved. A *bare* `*((table_end` has no name to match -- it's only a ghost
+  # if its own sheet has no resolved table at all (the common, valid case is a
+  # bare end shared by one or more tables that start on the same sheet).
+  sheets_with_tables <- unique(table_info$sheet_name)
+
   ghost_table_ends <- tags_info %>%
     filter_in_str(value, "\\*\\(\\(table_end") %>%
     mutate(table = target_extraction(value, "table_end")) %>%
     left_join(table_info %>% select(table = tbl) %>% mutate(okay = TRUE)) %>%
+    mutate(okay = if_else(
+      is.na(table),
+      if_else(sheet_name %in% sheets_with_tables, TRUE, NA),
+      okay
+    )) %>%
     filter_in_na(okay) %>%
     select(-okay) %>%
     rename(tag = value, row_start = row, col_start = col, tbl = table) %>%

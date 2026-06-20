@@ -42,25 +42,25 @@ Rscript dev/pipeline-test/build_templates.R dev/pipeline-test/templates
 | `04_fan_many`  | A fan that expands to many tabs (N-way clone), all rows/columns recovered. |
 | (reuses `01`) | Zero-row fan: warns, drops the template sheet, reads back an empty table. |
 | (reuses `01`) | Colliding tab names: errors **before** mutating the workbook. |
+| `05_flat_basic` | An ordinary flat table (`*((tbl` / `*((col` / a bare `*((table_end`) round-trips, with no trailing marker-row leak. |
 
-## Known gap — the flat-table path is intentionally not covered here
+## Fixed: two pre-existing flat-table bugs
 
-These templates only use fan sheets. The ordinary flat-table path
-(`*((tbl` / `*((col` / `*((table_end`) currently has two pre-existing issues,
-unrelated to fan sheets, that make it a poor fit for a clean round-trip smoke
-test:
+While building this harness, two pre-existing issues turned up in the ordinary
+flat-table path (`*((tbl` / `*((col` / `*((table_end`), unrelated to fan
+sheets. Both are now fixed (see `R/summarize_metadata.R`):
 
 1. A **bare `*((table_end`** marker — the grammar shown in the package
-   vignettes and shipped in `inst/extdata/example_metadata.xlsx` — is rejected
-   by `validate_metadata()` as *"Table End Without a Matching Table"*. (You can
-   reproduce this directly: `summarize_metadata("inst/extdata/example_metadata.xlsx")`
-   fails validation.) The validator matches a `table_end` to a table by the
-   table name extracted from the tag, but a bare `*((table_end` extracts no
-   name, so it never matches.
-2. A **named `*((table_end*((<tbl>`** marker validates, but the marker row is
-   read back as a trailing garbage data row unless the written data happens to
-   fill exactly up to it (the read range is `row_start:row_end` inclusive, with
-   no trailing-NA / marker-row trimming).
+   vignettes and shipped in `inst/extdata/example_metadata.xlsx` — used to be
+   rejected by `validate_metadata()` as *"Table End Without a Matching
+   Table"*, because the validator matched a `table_end` to a table by the name
+   extracted from the tag, and a bare `*((table_end` extracts no name. It's
+   now treated as ending every table on its own sheet, rather than requiring a
+   name match.
+2. A **named `*((table_end*((<tbl>`** marker used to read back as a trailing
+   garbage data row, because the resolved `row_end` pointed at the marker's
+   own row rather than the last real data row above it. `row_end` is now
+   stepped back one row so the marker row is excluded from the read range.
 
-Both are tracked as separate cleanup items for the flat-table read path and are
-out of scope for the fan-sheet feature.
+`05_flat_basic` exercises both: it uses the bare-marker grammar, and asserts no
+marker row leaks into the round-tripped table.

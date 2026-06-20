@@ -204,6 +204,26 @@ cat("\n6. colliding tab names: errors before mutating the workbook\n")
   ok(!file.exists(out), "no output file written on the failed run")
 }
 
+# ============================================================================
+cat("\n7. flat_basic: an ordinary flat table round-trips (bare table_end)\n")
+# ============================================================================
+{
+  df <- tibble(
+    report_title = "Flat",
+    projects = list(tibble(
+      project_id = c("Alpha", "Beta"),
+      status     = c("open", "closed"),
+      budget     = c(100, 200)
+    ))
+  )
+  r <- write_then_read(paths[["flat_basic"]], df)
+  eq(r$res$report_title, "Flat", "var round-trips")
+  got <- canon(r$res$projects[[1]], "project_id")
+  want <- canon(as.data.frame(df$projects[[1]]), "project_id")
+  eq(nrow(got), 2, "no trailing table_end marker row leaks into the data")
+  eq(got, want, "flat table round-trips (shape + values + types)")
+}
+
 cat("\n----------------------------------------------------------------\n")
 if (.failures == 0L) {
   cat("All pipeline checks passed.\n")

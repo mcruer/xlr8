@@ -1,17 +1,11 @@
 #!/usr/bin/env Rscript
-# Build a set of xlr8 *fan-sheet* templates that exercise the write -> read
-# pipeline end to end. Each template here validates cleanly and round-trips.
+# Build a set of xlr8 templates -- both fan-sheet and ordinary flat-table --
+# that exercise the write -> read pipeline end to end. Each template here
+# validates cleanly and round-trips.
 #
 # Pure openxlsx2 -- no xlr8/gplyr/listful needed just to author a template.
 # Run:   Rscript dev/pipeline-test/build_templates.R [out_dir]
 # or source this file and call build_all_templates("some/dir").
-#
-# NOTE: the ordinary flat-table path (*((tbl / *((col / *((table_end) is not
-# covered here on purpose. It currently has a pre-existing validation quirk
-# (a bare `*((table_end`, as documented in the vignettes and shipped in
-# inst/extdata/example_metadata.xlsx, is rejected by validate_metadata as a
-# "Table End Without a Matching Table"). That is unrelated to fan sheets and is
-# tracked separately; see README.md in this folder.
 
 suppressPackageStartupMessages(library(openxlsx2))
 
@@ -96,13 +90,38 @@ build_fan_many <- function(path) {
   path
 }
 
+# A flat table: the header cell combines `tbl` + the first column's `col` tag,
+# subsequent columns are bare `col` tags on the same row, and a bare
+# `*((table_end` sits on its own row right below the last data row -- the
+# grammar shown in the vignettes and shipped in inst/extdata/example_metadata.xlsx.
+add_flat_table <- function(wb, sheet_name, tbl, fields, header_row = 1, max_rows = 2) {
+  wb <- sheet(wb, sheet_name)
+  wb <- put(wb, sheet_name,
+            sprintf("*((tbl*((%s*((col*((%s", tbl, fields[[1]]), header_row, 1)
+  for (i in seq_along(fields)[-1]) {
+    wb <- put(wb, sheet_name, sprintf("*((col*((%s", fields[[i]]), header_row, i)
+  }
+  put(wb, sheet_name, "*((table_end", header_row + max_rows, 1)
+}
+
+# --- 5. flat baseline: a var + one ordinary flat table -----------------------
+build_flat_basic <- function(path) {
+  wb <- openxlsx2::wb_workbook()
+  wb <- add_summary(wb)
+  wb <- add_flat_table(wb, "projects", "projects", c("project_id", "status", "budget"))
+  wb <- add_form_sheet(wb)
+  openxlsx2::wb_save(wb, path, overwrite = TRUE)
+  path
+}
+
 build_all_templates <- function(out_dir) {
   dir.create(out_dir, showWarnings = FALSE, recursive = TRUE)
   c(
-    fan_basic = build_fan_basic(file.path(out_dir, "01_fan_basic.xlsx")),
-    multi_fan = build_multi_fan(file.path(out_dir, "02_multi_fan.xlsx")),
-    fan_dates = build_fan_dates(file.path(out_dir, "03_fan_dates.xlsx")),
-    fan_many  = build_fan_many(file.path(out_dir, "04_fan_many.xlsx"))
+    fan_basic  = build_fan_basic(file.path(out_dir, "01_fan_basic.xlsx")),
+    multi_fan  = build_multi_fan(file.path(out_dir, "02_multi_fan.xlsx")),
+    fan_dates  = build_fan_dates(file.path(out_dir, "03_fan_dates.xlsx")),
+    fan_many   = build_fan_many(file.path(out_dir, "04_fan_many.xlsx")),
+    flat_basic = build_flat_basic(file.path(out_dir, "05_flat_basic.xlsx"))
   )
 }
 
