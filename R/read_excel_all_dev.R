@@ -117,9 +117,12 @@ read_one_sheet_dev <- function(sheet_name, wb, all_names) {
   rows <- as.integer(cc$row_r)
   cols <- openxlsx2::col2int(cc$c_r)
 
-  # Anchor the read at A1 so leading blank rows and columns are preserved --
-  # without explicit dims, wb_to_df() starts at the first non-empty cell, which
-  # would shift every position the metadata relies on.
+  # Anchor the read at A1. Without explicit dims wb_to_df() starts at the first
+  # non-empty cell; positions survive that anyway, because it reports absolute
+  # row numbers as rownames and column letters as colnames and we read the
+  # positions from those. This is belt-and-braces against that changing, since
+  # leading blank rows and columns shifting would corrupt every position the
+  # metadata slices by. It measures as free, so it stays.
   dims <- openxlsx2::wb_dims(rows = seq_len(max(rows)), cols = seq_len(max(cols)))
   d <- openxlsx2::wb_to_df(wb, sheet = sheet_name, col_names = FALSE, dims = dims,
                            skip_empty_rows = FALSE, skip_empty_cols = FALSE)
