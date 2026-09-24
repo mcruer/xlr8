@@ -1,0 +1,45 @@
+#' Assert every tagged formula_location resolved to a real formula
+#'
+#' [summarize_metadata()] reads the formula out of each cell named by a
+#' \code{formula_location} tag and replicates it across the output workbooks. If
+#' the reader hands back \code{NA} for one of those cells, the tag silently
+#' produces a blank formula in every file written -- a data error rather than a
+#' crash, and one nothing currently checks for.
+#'
+#' The usual cause is a cell that inherits its formula from a shared-formula
+#' master: the xlsx stores the text only once, against the master, and a reader
+#' that doesn't propagate returns nothing for the cells that inherit it. The
+#' other cause is a tag simply pointing at a cell that has no formula in it.
+#'
+#' @param tagged A tibble of tagged locations joined to their formula text, with
+#'   columns \code{sheet_name}, \code{formula_location} and \code{formula} --
+#'   i.e. the result of joining \code{all_info} to the formula definitions
+#'   inside [summarize_metadata()].
+#'
+#' @return \code{tagged}, invisibly, if every row has a formula. Otherwise
+#'   stops, naming each offending cell.
+#'
+#' @examples
+#' \dontrun{
+#' all_info %>%
+#'   filter_out_na(formula_location) %>%
+#'   left_join(formula_definitions) %>%
+#'   check_formula_locations()
+#' }
+#'
+#' @export
+check_formula_locations <- function(tagged) {
+  missing <- dplyr::filter(tagged, is.na(formula))
+  if (nrow(missing) > 0) {
+    stop(
+      "summarize_metadata(): no formula found at ", nrow(missing),
+      " tagged formula_location(s):\n  ",
+      paste0(missing$sheet_name, "!", missing$formula_location, collapse = "\n  "),
+      "\n\nEither the template genuinely has no formula at these cells (fix the ",
+      "tag), or they inherit one from a shared-formula master that the reader ",
+      "did not propagate (fix the reader).",
+      call. = FALSE
+    )
+  }
+  invisible(tagged)
+}
