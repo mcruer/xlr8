@@ -25,6 +25,7 @@ Imports:
     stringr,
     tibble,
     tidyr,
+    stats,
     tidyxl,
     utils
 Suggests: 

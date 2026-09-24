@@ -124,23 +124,29 @@ read_one_sheet_dev <- function(sheet_name, wb, all_names) {
   d <- openxlsx2::wb_to_df(wb, sheet = sheet_name, col_names = FALSE, dims = dims,
                            skip_empty_rows = FALSE, skip_empty_cols = FALSE)
 
+  # Drop the empty cells before doing anything else with them. These sheets are
+  # wide and sparse -- the TINA template's "Basic Project Info" holds 4,568
+  # cells in a 116 x 466 rectangle -- so reshaping the whole rectangle and
+  # filtering afterwards costs several times more than reshaping what's in it.
+  flat <- as.character(unlist(d, use.names = FALSE))
+  keep <- !is.na(flat)
+
   values <- tibble::tibble(
-    row = rep(as.integer(rownames(d)), times = ncol(d)),
-    col = rep(openxlsx2::col2int(colnames(d)), each = nrow(d)),
+    row = rep(as.integer(rownames(d)), times = ncol(d))[keep],
+    col = rep(openxlsx2::col2int(colnames(d)), each = nrow(d))[keep],
     # tidyxl keeps CRLF inside cells; openxlsx2 normalises to LF.
-    cell_contents = stringr::str_replace_all(
-      as.character(unlist(d, use.names = FALSE)), "(?<!\r)\n", "\r\n")
+    cell_contents = stringr::str_replace_all(flat[keep], "(?<!\r)\n", "\r\n")
   )
 
   formulas <- tibble::tibble(
     row = rows,
     col = cols,
     formula = unescape_xml_dev(dplyr::na_if(cc$f, ""))
-  )
+  ) %>%
+    dplyr::filter(!is.na(formula))
 
   values %>%
-    dplyr::left_join(formulas, by = c("row", "col")) %>%
-    dplyr::filter(!is.na(cell_contents) | !is.na(formula)) %>%
+    dplyr::full_join(formulas, by = c("row", "col")) %>%
     # A formula cell whose result is the empty string reads as "" in tidyxl but
     # NA in openxlsx2. Match tidyxl.
     dplyr::mutate(cell_contents = dplyr::if_else(
