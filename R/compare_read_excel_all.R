@@ -107,7 +107,7 @@ compare_one_file_dev <- function(path, sheets, sheets_regex, max_examples) {
          ok    = !inherits(value, "reader_error"))
   }
 
-  old <- run(read_excel_all)
+  old <- run(read_excel_all_tidyxl)
   new <- run(read_excel_all_dev)
 
   status <- dplyr::case_when(

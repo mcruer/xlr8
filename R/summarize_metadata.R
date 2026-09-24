@@ -211,6 +211,10 @@ summarize_metadata_from_raw_template <- function(raw_template) {
   output_formulas<- all_info %>%
     filter_out_na(formula_location) %>%
     left_join(formula_definitions)%>%
+    # Every tagged location must have yielded a formula. A reader that does not
+    # propagate shared formulas returns NA for cells that inherit one, which
+    # would write blank formulas into every output workbook without erroring.
+    check_formula_locations() %>%
     mutate(
       formula_from_row = ref_to_row(formula_location),
       formula_from_col = ref_to_col(formula_location),

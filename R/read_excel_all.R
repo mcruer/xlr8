@@ -1,5 +1,5 @@
 
-#' Read All Cells from Excel Sheets into a Structured Tibble
+#' Read All Cells from Excel Sheets into a Structured Tibble (tidyxl backend)
 #'
 #' Reads and extracts cell data from specified Excel sheets using \code{tidyxl},
 #' converting it into a structured, wide-format tibble suitable for analysis.
@@ -44,8 +44,20 @@
 #' read_excel_all("workbook.xlsx", sheets_regex = "^2024")
 #' }
 #'
+#' @section Superseded:
+#' [read_excel_all()] now reads via [read_excel_all_dev()] (openxlsx2). This
+#' function is the original tidyxl implementation, kept so the two can still be
+#' compared -- see [compare_read_excel_all()]. It carries a bug that
+#' \code{read_excel_all_dev()} does not: a cell comment on a
+#' formatted-but-empty cell makes \code{tidyxl::xlsx_cells()} overrun its
+#' output vectors and fail with \code{attempt to set index N/N in
+#' SET_STRING_ELT}. Prefer [read_excel_all()].
+#'
+#' @seealso [read_excel_all()], [read_excel_all_dev()],
+#'   [compare_read_excel_all()]
+#'
 #' @export
-read_excel_all <- function(path, sheets = NULL, sheets_regex = ".") {
+read_excel_all_tidyxl <- function(path, sheets = NULL, sheets_regex = ".") {
 
   sheet_names <- tidyxl::xlsx_sheet_names(path)
   if(is.null(sheets)){
@@ -101,4 +113,48 @@ read_excel_all <- function(path, sheets = NULL, sheets_regex = ".") {
 
   gplyr::cloak(out, list(formulas = initial, wb = openxlsx2::wb_load (path)))
 
+}
+
+
+#' Read All Cells from Excel Sheets into a Structured Tibble
+#'
+#' Reads and extracts cell data from the specified Excel sheets, converting it
+#' into a structured, wide-format tibble suitable for analysis. Sheets can be
+#' selected explicitly or by regex.
+#'
+#' @inheritParams read_excel_all_dev
+#'
+#' @return A wide-format tibble with \code{sheet_name}, \code{row}, and
+#'   \code{x1}, \code{x2}, ... columns, one column per Excel column index,
+#'   carrying cloaked \code{formulas} and \code{wb} attributes. See
+#'   [read_excel_all_dev()] for the full description.
+#'
+#' @details
+#' This is a thin wrapper over [read_excel_all_dev()], which reads via
+#' \code{openxlsx2}. It previously read via \code{tidyxl}; that implementation
+#' is still available as [read_excel_all_tidyxl()] so the two can be compared,
+#' but it should not be used, because
+#' \code{tidyxl::xlsx_cells(include_blank_cells = FALSE)} fails outright on any
+#' workbook with a cell comment on a formatted-but-empty cell.
+#'
+#' The two were compared over 63 production tracker workbooks and 7,397,136
+#' cells. They agreed everywhere except 19 cells holding Excel serial 0 in a
+#' date-formatted column -- a value that is not a real date in either reading --
+#' and the openxlsx2 backend was 5.3x faster on every one of the 62 files
+#' tidyxl could read at all.
+#'
+#' @seealso [read_excel_all_dev()] for what changed between the two backends and
+#'   the one known behavioural difference (shared formulas are not propagated);
+#'   [compare_read_excel_all()] to check them against each other on real files.
+#'
+#' @examples
+#' \dontrun{
+#' read_excel_all("workbook.xlsx")
+#' read_excel_all("workbook.xlsx", sheets = c("Data", "Summary"))
+#' read_excel_all("workbook.xlsx", sheets_regex = "^2024")
+#' }
+#'
+#' @export
+read_excel_all <- function(path, sheets = NULL, sheets_regex = ".") {
+  read_excel_all_dev(path, sheets = sheets, sheets_regex = sheets_regex)
 }

@@ -91,7 +91,7 @@ benchmark_one_file_dev <- function(path, reps, sheets, sheets_regex) {
     list(secs = min(secs), med = stats::median(secs), cells = cells)
   }
 
-  old <- time_reader(read_excel_all)
+  old <- time_reader(read_excel_all_tidyxl)
   new <- time_reader(read_excel_all_dev)
 
   tibble::tibble(
