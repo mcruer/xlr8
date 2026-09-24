@@ -13,8 +13,16 @@ unescape_xml_dev(x)
 \code{x} with XML entities replaced by the characters they stand for.
 }
 \description{
-\code{openxlsx2} hands back the raw XML text of a formula, in which
-\code{<}, \code{>}, \code{&}, \code{"} and \code{'} are escaped.
-\code{tidyxl} unescapes them. Match tidyxl.
+\code{openxlsx2} hands back the raw XML text of a formula, in which the five
+XML metacharacters appear as entities: \code{&lt;} for less-than,
+\code{&gt;} for greater-than, \code{&amp;} for ampersand, \code{&quot;}
+for a double quote and \code{&apos;} for an apostrophe. \code{tidyxl}
+unescapes them. Match tidyxl.
+}
+\details{
+They are named as entities above rather than written as the bare characters
+on purpose: an unpaired quote character inside an Rd markup macro opens a
+string that never closes, and R CMD build then fails to parse the generated
+.Rd file.
 }
 \keyword{internal}
